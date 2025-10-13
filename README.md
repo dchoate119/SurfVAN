@@ -34,9 +34,8 @@ In this paper we introduce a vision-aided navigation (VAN) pipeline designed to 
 
 ## To-Do List
 
-- [ ] Upload necessary images and COLMAP results
-- [ ] gNAV agent file finalized with SSD process
-- [ ] Finalize demo notebook
-- [ ] Add visualization notebook for pose estimations 
+- [x] Upload necessary images and COLMAP results
+- [ ] gNAV agent file finalized with SSD process (done up to mosaic)
+- [ ] Finalize demo notebook with visualizations (done up to mosaic)
 - [ ] .yaml file for release 
 - [ ] Write final README documentation
