@@ -92,8 +92,12 @@ class gNAV_agent:
 		Inputs: filename, picture ID number
 		Output: variable created according to image number
 		"""
-		image = cv2.imread(image_path)
-		self.images_dict[i] = image
+		# image = cv2.imread(image_path)
+		# self.images_dict[i] = image
+		if os.path.exists(image_path):
+			image = cv2.imread(image_path)
+			if image is not None:
+				self.images_dict[i] = image
 
 	def sat_im_init(self):
 		"""
@@ -427,7 +431,7 @@ class gNAV_agent:
 		"""
 		self.mosaic_params = mosaic_params
 		# Loop through mosaic_params for each image
-		for imnum in range(len(mosaic_params)):
+		for imnum in range(len(self.images_dict)):
 			x, y, width, height = mosaic_params[imnum]
 
 			# Create grid of coords
@@ -458,9 +462,10 @@ class gNAV_agent:
 		Input: figure, axes
 		Output: subplot with proper ground section identification 
 		"""
+		rows = int(len(self.images_dict)/5)
 		# Loop through each image
-		for imnum in range(len(self.mosaic_params)):
-			plt.subplot(2,5,imnum+1)
+		for imnum in range(len(self.images_dict)):
+			plt.subplot(rows,5,imnum+1)
 			# Grab parameters 
 			x, y, width, height = self.mosaic_params[imnum]
 			# Draw rectangle 
