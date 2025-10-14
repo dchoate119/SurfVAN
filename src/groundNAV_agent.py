@@ -607,10 +607,72 @@ class gNAV_agent:
 			cloud.colors = o3d.utility.Vector3dVector(self.im_mosaic[i]['color_g'])
 			vis.add_geometry(cloud)
 
-		# # Create point cloud for reference cloud (satellite)
-		# ref_cloud = o3d.geometry.PointCloud()
-		# ref_cloud.points = o3d.utility.Vector3dVector(gnav.ref_pts)
-		# ref_cloud.colors = o3d.utility.Vector3dVector(gnav.ref_rgb)
+		# Run and destroy visualization 
+		vis.run()
+		vis.destroy_window()
+
+
+	def tform_create(self,x,y,z,roll,pitch,yaw):
+		"""
+		Creates a transformation matrix 
+		Inputs: translation in x,y,z, rotation in roll, pitch, yaw (DEGREES)
+		Output: Transformation matrix (4x4)
+		"""
+		# Rotation
+		roll_r, pitch_r, yaw_r = np.array([roll, pitch, yaw])
+		euler_angles = [roll_r, pitch_r, yaw_r]
+		rotmat = R.from_euler('xyz', euler_angles).as_matrix()
+
+		# Translation
+		trans = np.array([x,y,z]).reshape([3,1])
+
+		# Create 4x4
+		bottom = np.array([0.0, 0.0, 0.0, 1.0]).reshape([1,4])
+		tform = np.concatenate([np.concatenate([rotmat, trans], 1), bottom], 0)
+		# print("\nTransformation matrix \n", tform)
+
+		return tform
+
+	def implement_guess(self, tform_guess, scale):
+		"""
+		Implementing the newest state estimate guess for mosaic
+		Input: transformation guess, scaling factor
+		Output: transformed points for best guess
+		"""
+
+		# Implement tform for each image
+		for i in range(len(self.images_dict)):
+			loc_im_pts = self.im_mosaic[i]['pts'].copy()
+			# apply scale
+			loc_im_pts[:,:2] *= scale
+			# apply tform
+			_, loc_im_pts_guess, loc_im_vec_guess = self.unit_vec_tform(loc_im_pts, self.origin_w, tform_guess)
+			# Update best guess
+			self.im_pts_best_guess[i] = {'pts': loc_im_pts_guess}
+
+
+	def mosaic_w_ref_visualization(self, vis):
+		""" 
+		Plotting the new scene mosaic 
+		Input: vis (from open3d)
+		Output: vis with mosaic (from open3d)
+		"""
+
+		# Create axes @ origin
+		axis_origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1)
+		vis.add_geometry(axis_origin)
+
+		for i in range(len(self.images_dict)):
+			cloud = o3d.geometry.PointCloud()
+			cloud.points = o3d.utility.Vector3dVector(self.im_pts_best_guess[i]['pts'])
+			cloud.colors = o3d.utility.Vector3dVector(self.im_mosaic[i]['color_g'])
+			vis.add_geometry(cloud)
+
+		# Create point cloud for reference cloud (satellite)
+		ref_cloud = o3d.geometry.PointCloud()
+		ref_cloud.points = o3d.utility.Vector3dVector(self.ref_pts)
+		ref_cloud.colors = o3d.utility.Vector3dVector(self.ref_rgb)
+		vis.add_geometry(ref_cloud)
 
 		# # Size options (jupyter gives issues when running this multiple times, but it looks better)
 		# render_option = vis.get_render_option()
@@ -629,3 +691,125 @@ class gNAV_agent:
 		# Run and destroy visualization 
 		vis.run()
 		vis.destroy_window()
+
+	def get_inside_sat_pts(self, imnum, shiftx, shifty):
+		"""
+		Getting points inside the satellite image
+		Input: image number, shiftx, shifty
+		Output: Points inside corners from satellite image 
+		"""
+
+		# Get corners 
+		corners = self.im_pts_2d[imnum]['corners']
+		# Define corner indices 
+		idxs = [0, -corners[2], -1, corners[2]-1]
+		# print(idxs)
+		
+		# Grab corner points 
+		points = np.array(self.im_pts_best_guess[imnum]['pts'])[idxs]
+		# Shift corners of points
+		points[:,0] += shiftx
+		points[:,1] += shifty
+		points2d = points[:,:-1]
+		# print(points2d)
+
+		# Define polygon path 
+		polygon_path = Path(points2d)
+		# Points within polygon 
+		mask = polygon_path.contains_points(self.ref_pts[:,:-1])
+		inside_pts = self.ref_pts[mask]
+		inside_cg = self.ref_rgb[mask]
+
+		return inside_pts, inside_cg
+
+
+
+	def ssds_nxn(self, n, imnum):
+		"""
+		New SSD process to run faster
+		Sum of squared differences. Shifts around pixels 
+		Input: n shift amount, image number
+		Output: sum of squared differences for each shift
+		"""
+		downs = 1 # Factor to downsample by 
+		ssds = np.zeros((2*n+1,2*n+1))
+		loc_pts = self.im_pts_best_guess[imnum]['pts'].copy()
+		# print(loc_pts)
+
+		for shiftx in range(-n,n+1):
+			for shifty in range(-n, n+1):
+				# Get points inside corners for satellite image 
+				inside_pts, inside_cg = self.get_inside_sat_pts(imnum,shiftx,shifty)
+				# print(inside_pts.shape)
+
+				# Downsample pts (grab only x and y)
+				downsampled_pts = inside_pts[::downs, :-1] # Take every 'downs'-th element
+				downsampled_cg = inside_cg[::downs,0]
+				# print("Colors of downsampled pts\n", downsampled_cg)
+
+				# Shift points 
+				shifted_loc_pts = loc_pts + np.array([shiftx,shifty,0])
+				# print(shiftx,shifty)
+				# print(shifted_loc_pts)
+
+				# Build tree
+				tree = cKDTree(shifted_loc_pts[:,:2])
+
+				# Find nearest points and calculate intensities
+				distances, indices = tree.query(downsampled_pts, k=1)
+				nearest_intensities = self.im_mosaic[imnum]['color_g'][indices,0]
+				self.ints2 = nearest_intensities
+				# print("\nNearest Intensities\n", nearest_intensities)
+				# print(distances, indices)
+
+				# Calculate SSDS
+				diffs = downsampled_cg - nearest_intensities 
+				# print("\nDifferences\n", diffs)
+				ssd_curr = np.sum(diffs**2)
+
+				# Store SSD value for the current shift
+				ssds[shiftx + n, shifty + n] = ssd_curr
+				# print("SSD = ", ssd_curr)
+
+		print(f"Number of points used for image {imnum}: ", diffs.shape)
+		
+		return ssds
+
+
+	def dy_from_ssd(self, n):
+		"""
+		Takes SSD values and creates vectors from original position to minimum SSD location 
+		Inputs: n (shift max)
+		Outputs: yi (to be used for jacobian)
+		"""
+		return 1
+
+
+	def form_jacobian(self, parameters_best_guess):
+		"""
+		Forms jacobian matrix of for change across all patches 
+		Input: Current best guess parameters
+		Output: Full Jacobian J *****DIMENSION??****
+		"""
+		return 1
+
+	def param_change_lsquares(self, J, yi):
+		"""
+		Parameter update step for each iteration
+		Input: Jacobian, delatY
+		Output: change in params, new params
+		"""
+		return 1
+
+
+
+
+
+
+
+
+# FUNCTIONS FOR LSQUARES PROCESS 
+# 1. Generate deltaY term from SSDs (input: self, n) (output: yi)
+# 2. Form big jacobian J (input: self, parameters_best guess), (output: J)
+# 3. Least squares dalpha (input: self, J, yi) (output: dalpha, new params)
+# 4. Apply change to points (input: self, params) (output: "Done")
