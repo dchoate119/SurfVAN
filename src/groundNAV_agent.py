@@ -724,7 +724,7 @@ class gNAV_agent:
 
 
 
-	def ssds_nxn(self, n, imnum):
+	def ssd_nxn(self, n, imnum):
 		"""
 		New SSD process to run faster
 		Sum of squared differences. Shifts around pixels 
@@ -782,24 +782,128 @@ class gNAV_agent:
 		Inputs: n (shift max)
 		Outputs: yi (to be used for jacobian)
 		"""
-		return 1
+		# Set extension pixel threshold
+		extend = 10
+		# Create vector from original position to minimum SSD location
+		cor_vecs = np.zeros((len(self.images_dict), 2))
+		base_vec = np.zeros((len(self.images_dict), 2))
+		for im_cv in range(len(self.images_dict)):
+			# Grabb SSDs - get ID of the minimum
+			ssds = self.ssds_curr[im_cv]
+			idrow, idcol = np.unravel_index(np.argmin(ssds), ssds.shape)
+			# print("\nidrow, idcol\n", idrow, idcol)
+			# Define best shift vector
+			shiftx_min, shifty_min = idrow-n, idcol-n
+			# # CHECK IF MIN SSD IS ON EDGE - leave out for now
+			# if shiftx_min == n or shifty_min == n:
+			# 	print(f"Need to extend search of image {im_cv}:\n")
+			# 	print(f"Current shift vector = {shiftx_min, shifty_min}\n")
+			# 	ssds = gnav.ssd_nxn(n+extend, im_cv)
+			# 	gnav.ssds_curr[im_cv] = ssds
+			# 	idrow, idcol = np.unravel_index(np.argmin(ssds), ssds.shape)
+			# 	shiftx_min = idrow-(n+extend)
+			# 	shifty_min = idcol-(n+extend)
+			# 	print(f"\n New shift vector = {shiftx_min, shifty_min}\n")
+
+			cor_vecs[im_cv] = shiftx_min, shifty_min
+			sat_pts, __ = self.get_inside_sat_pts(im_cv, 0,0)
+			basex, basey = np.mean(sat_pts[:,0]), np.mean(sat_pts[:,1])
+			base_vec[im_cv] = basex, basey
+
+		# Create and stack point from vectors 
+		points_b = np.hstack((base_vec, np.zeros((len(self.images_dict), 1))))
+		points_e = points_b + np.hstack((cor_vecs, np.zeros((len(self.images_dict), 1))))
+		points = np.vstack((points_b, points_e))
+		# print("\nBeginning of points: \n", points_b)
+	    # print("\nEnd of points: \n",points_e)
+	    # print("\nAll points: \n",points)
+
+		y_i = cor_vecs.reshape(-1,1)
+		# print("\nYi\n", y_i)
+
+		return y_i
 
 
 	def form_jacobian(self, parameters_best_guess):
 		"""
 		Forms jacobian matrix of for change across all patches 
-		Input: Current best guess parameters
-		Output: Full Jacobian J *****DIMENSION??****
+		Input: Current best guess parameters (scale, theta, dx, dy)
+		Output: Full Jacobian J (dim = len(images)*2 x 4)
 		"""
-		return 1
+		# Parameters are the current best guess
+		params = parameters_best_guess
+		# Form Jacobian for each image
+		J = np.zeros((2*len(self.images_dict),4))
+		theta = params[1][0]
+		s = params[0][0]
+		for i_m in range(len(self.images_dict)):
+			xpi = np.mean(self.im_pts_best_guess[i_m]['pts'][:,0])
+			xqi = np.mean(self.im_pts_best_guess[i_m]['pts'][:,1])
+			# Jacobian value (based on derived state eqns)
+			j11 = np.cos(theta)*xpi - np.sin(theta)*xqi
+			j21 = np.sin(theta)*xpi + np.cos(theta)*xqi
+			j12 = -params[0][0]*(np.sin(theta)*xpi + np.cos(theta)*xqi)
+			j22 = params[0][0]*(np.cos(theta)*xpi - np.sin(theta)*xqi)
+			j13, j23, j14, j24 = 1, 0, 0, 1
 
-	def param_change_lsquares(self, J, yi):
+			# Construct Jacobian 
+			J_upper = np.hstack((j11,j12,j13,j14)) # First row block (y_p terms)
+			J_lower = np.hstack((j21,j22,j23,j24)) # Second row block (y_q terms)
+			j = np.vstack((J_upper, J_lower))
+
+			#Insert in proper index 
+			J[2*(i_m):2*(i_m)+2, :] = j
+
+		print("\nJACOBIAN\n", J)
+
+
+		return J
+
+	def param_change(self, J, y_i):
 		"""
 		Parameter update step for each iteration
 		Input: Jacobian, delatY
 		Output: change in params, new params
 		"""
-		return 1
+		JTJi = np.linalg.inv(J.T@J)
+		Dalpha = JTJi@J.T@y_i
+
+		return Dalpha
+
+	def mapmatch_lsquares(self, n, iterations, params_best_guess):
+		"""
+		Implementing full least squares process for map matching
+		Inputs: n (pixel shift mag), iterations, initial guess
+		Output: Updated parameters (s, yaw, tp tq)
+		"""
+		self.params_best_guess = params_best_guess
+		# Loop based on iterations
+		for iter_idx in range(iterations):
+			for imnum in range(len(self.images_dict)):
+				# Implement SSD process
+				ssds = self.ssd_nxn(n, imnum)
+				self.ssds_curr[imnum] = ssds
+
+			# Generate correction vectors y_i
+			y_i = self.dy_from_ssd(n)
+			print(f"Here is y_i for iteration {iter_idx}:\n", y_i)
+
+			# Create jacobian
+			J = self.form_jacobian(params_best_guess)
+
+			# Get delta_params
+			Dalpha = self.param_change(J, y_i)
+			print("\nDelta Alpha:\n", Dalpha)
+			# Update params 
+			self.params_best_guess += Dalpha
+			print("\nUpdated Params: scale, theta, tq, tp\n", self.params_best_guess)
+
+			# Apply change 
+			tform_mat = self.tform_create(self.params_best_guess[2][0], self.params_best_guess[3][0], 0, 0, 0, self.params_best_guess[1][0])
+			print("\nTransformation matrix\n", tform_mat)
+
+		return self.params_best_guess
+
 
 
 
