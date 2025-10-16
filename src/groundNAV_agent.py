@@ -8,7 +8,8 @@ from scipy.spatial.transform import Rotation as R
 from scipy.spatial import cKDTree
 from matplotlib.path import Path
 import os 
-import open3d as o3d
+from mpl_toolkits.mplot3d import Axes3D
+
 
 from colmapParsingUtils import *
 
@@ -646,9 +647,26 @@ class gNAV_agent:
 			# apply scale
 			loc_im_pts[:,:2] *= scale
 			# apply tform
-			_, loc_im_pts_guess, loc_im_vec_guess = self.unit_vec_tform(loc_im_pts, self.origin_w, tform_guess)
+			__, loc_im_pts_guess, loc_im_vec_guess = self.unit_vec_tform(loc_im_pts, self.origin_w, tform_guess)
 			# Update best guess
 			self.im_pts_best_guess[i] = {'pts': loc_im_pts_guess}
+
+	def update_guess(self, tform_guess, scale):
+		"""
+		Implementing the newest state estimate guess for mosaic
+		Input: transformation guess, scaling factor
+		Output: transformed points for best guess
+		"""
+
+		# Implement tform for each image
+		for i in range(len(self.images_dict)):
+			loc_im_pts = self.im_mosaic[i]['pts'].copy()
+			# apply scale
+			loc_im_pts[:,:2] *= scale
+			# apply tform
+			__, loc_im_pts_guess, loc_im_vec_guess = self.unit_vec_tform(loc_im_pts, self.origin_w, tform_guess)
+			# Update best guess
+			self.im_pts_best_guess[i]['pts'] = loc_im_pts_guess
 
 
 	def mosaic_w_ref_visualization(self, vis):
@@ -899,21 +917,72 @@ class gNAV_agent:
 			print("\nUpdated Params: scale, theta, tq, tp\n", self.params_best_guess)
 
 			# Apply change 
+			# Create transformation matrix
 			tform_mat = self.tform_create(self.params_best_guess[2][0], self.params_best_guess[3][0], 0, 0, 0, self.params_best_guess[1][0])
 			print("\nTransformation matrix\n", tform_mat)
+			# Apply tform matrix to image patches
+			self.update_guess(tform_mat, self.params_best_guess[0][0])
+
+
 
 		return self.params_best_guess
 
 
+	def ssd_surface_plots(self, ims, n):
+		"""
+		Surface plot visualizations for SSD confidence level
+		Inputs: Figure, Images to display (1-10 meaining all ten images)
+		Output: Figure(s) (depending on number of images)
+		"""
+
+		# X coords:
+		x = np.linspace(-n,n, 2*n+1)
+		y = np.linspace(-n,n, 2*n+1)
+		Y, X = np.meshgrid(x,y)
+
+		# Create plot for each image specified
+		for i in range(ims):
+			# Find best shift
+			ssds = self.ssds_curr[i]
+			idrow, idcol = np.unravel_index(np.argmin(ssds), ssds.shape)
+			shiftx_min = idrow - n
+			shifty_min = idcol - n
+			print(f"BEST SHIFT for image {i}:", shiftx_min, shifty_min)
+			# print("BEST SSD =", ssds[idrow, idcol])
+
+			# Plot SSD as a surface
+			fig = plt.figure()
+			ax = fig.add_subplot(111, projection='3d')
+
+			# Surface plot
+			surf = ax.plot_surface(X, Y, ssds, cmap='viridis', edgecolor='none')
+
+			# Highlight minimum SSD point
+			ax.scatter(shiftx_min, shifty_min, ssds[idrow, idcol], color='red', s=50, label='Min SSD')
+
+			# Set axis limits
+			ax.set_xlim([-n, n])
+			ax.set_ylim([-n, n])
+			ax.set_zlim([np.min(ssds), np.max(ssds)])
+
+			# Set ticks at every 1 unit
+			ax.set_xticks(np.arange(-n, n+1, 5))
+			ax.set_yticks(np.arange(-n, n+1, 5))
+			ax.set_zticks([])
+
+			# Labels and title
+			ax.set_xlabel('X Shift (pixels)')
+			ax.set_ylabel('Y Shift (pixels)')
+			# ax.set_zlabel('SSD Value')
+			ax.set_title(f'SSD Surface Plot: Image {i}')
+			ax.legend()
+			ax.view_init(elev=90, azim=-90)
+			# Color bar for the surface
+			# fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10, label='SSD Value')
+
+			plt.show()
 
 
 
+		
 
-
-
-
-# FUNCTIONS FOR LSQUARES PROCESS 
-# 1. Generate deltaY term from SSDs (input: self, n) (output: yi)
-# 2. Form big jacobian J (input: self, parameters_best guess), (output: J)
-# 3. Least squares dalpha (input: self, J, yi) (output: dalpha, new params)
-# 4. Apply change to points (input: self, params) (output: "Done")
