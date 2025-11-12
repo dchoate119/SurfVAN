@@ -904,14 +904,14 @@ class gNAV_agent:
 
 			# Generate correction vectors y_i
 			y_i = self.dy_from_ssd(n)
-			print(f"Here is y_i for iteration {iter_idx}:\n", y_i)
+			print(f"y_i for iteration {iter_idx}:\n", y_i)
 
 			# Create jacobian
 			J = self.form_jacobian(params_best_guess)
 
 			# Get delta_params
 			Dalpha = self.param_change(J, y_i)
-			print("\nDelta Alpha:\n", Dalpha)
+			print("\nDelta Alpha: scale, theta, tq, tp\n", Dalpha)
 			# Update params 
 			self.params_best_guess += Dalpha
 			print("\nUpdated Params: scale, theta, tq, tp\n", self.params_best_guess)
@@ -981,8 +981,4 @@ class gNAV_agent:
 			# fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10, label='SSD Value')
 
 			plt.show()
-
-
-
-		
 

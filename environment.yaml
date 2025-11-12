@@ -1,0 +1,12 @@
+name: SurfVAN_demo
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - numpy
+  - scipy
+  - matplotlib
+  - plotly
+  - open3d
+  - opencv
+  - pip
