@@ -37,7 +37,6 @@ class gNAV_agent:
 		# Initialize best guess and SSDs
 		self.im_pts_best_guess = {}
 		self.ssds_curr = {}
-		# self.ssds1_curr = {}
 		# Ground plane points - chosen MANUALLY
 		self.pts_gnd_idx = np.array([25440, 25450, 25441, 25449, 25442, 25445, 103922, 103921, 103919, 103920])
 
