@@ -34,7 +34,7 @@ Experimental results reveal that drift within the SfM solution, similar to that 
 
 ## Run the demo notebook
 
-For a demonstration of our pipeline, run the demo notebook [here] (src/SurfVAN_demo.ipynb)
+For a demonstration of our pipeline, run the demo notebook [here](./src/SurfVAN_demo.ipynb)
 
 ### Environment Setup
 
@@ -43,8 +43,8 @@ It’s recommended to use [Anaconda](https://www.anaconda.com/) to manage depend
 Create and activate the environment:
 
 ```bash
-conda env create -f environment.yml
-conda activate pointcloud-demo
+conda env create -f environment.yaml
+conda activate SurfVAN_demo
 ```
 
 Once environment is active, launch Jupyter and open demo notebook:
@@ -58,5 +58,5 @@ jupyter notebook src/SurfVAN_demo.ipynb
 - [x] Upload necessary images and COLMAP results
 - [x] gNAV agent file with SSD process
 - [x] Finalize demo notebook with visualizations (up to residual plots)
-- [ ] .yaml file for release 
-- [ ] Write final README documentation
+- [x] .yaml file for release 
+- [x] Write final README documentation
