@@ -49,7 +49,6 @@ cd SurfVAN
 Create and activate the environment:
 
 ```bash
-git clone http://
 conda env create -f environment.yaml
 conda activate SurfVAN_demo
 ```
