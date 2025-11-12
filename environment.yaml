@@ -9,4 +9,4 @@ dependencies:
   - plotly
   - open3d
   - opencv
-  - pip
+  - notebook

@@ -34,15 +34,22 @@ Experimental results reveal that drift within the SfM solution, similar to that 
 
 ## Run the demo notebook
 
-For a demonstration of our pipeline, run the demo notebook [here](./src/SurfVAN_demo.ipynb)
+For a demonstration of our pipeline, run the demo notebook [here](./src/surfVAN_demo.ipynb)
 
 ### Environment Setup
 
-It’s recommended to use [Anaconda](https://www.anaconda.com/) to manage dependencies.
+I recommended [Anaconda](https://www.anaconda.com/) to manage dependencies.
+
+First, clone repo
+```bash
+git clone https://github.com/dchoate119/SurfVAN.git
+cd SurfVAN
+```
 
 Create and activate the environment:
 
 ```bash
+git clone http://
 conda env create -f environment.yaml
 conda activate SurfVAN_demo
 ```
@@ -50,13 +57,6 @@ conda activate SurfVAN_demo
 Once environment is active, launch Jupyter and open demo notebook:
 
 ```bash
-jupyter notebook src/SurfVAN_demo.ipynb
+jupyter notebook src/surfVAN_demo.ipynb
 ```
 
-## To-Do List
-
-- [x] Upload necessary images and COLMAP results
-- [x] gNAV agent file with SSD process
-- [x] Finalize demo notebook with visualizations (up to residual plots)
-- [x] .yaml file for release 
-- [x] Write final README documentation
